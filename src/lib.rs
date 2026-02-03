@@ -35,7 +35,7 @@ where
     dir1: P1,
     dir2: P2,
     enable: EN,
-    throtte: u16,
+    throttle: u16,
 }
 
 /// Command sent to a motor driver.
@@ -63,11 +63,10 @@ where
     P2: digital::OutputPin,
     EN: pwm::SetDutyCycle,
 {
-    const STOP_THROTTLE: u16 = 0u16;
 
     pub fn new(dir1: P1, dir2: P2, enable: EN) -> Self {
-        let mut  handle = Self { dir1, dir2, enable, throtte: 0u16 };
-        handle.enable.set_duty_cycle(0u16).unwrap();
+        let mut  handle = Self { dir1, dir2, enable, throttle: 0u16 };
+        handle.enable.set_duty_cycle(0u16).ok();
 
         handle
     }
@@ -75,8 +74,8 @@ where
     pub fn set_function(&mut self, function: MotorFunction) {
         // Set the mode
         match function {
-             MotorFunction::Forward { .. } => self.forward(),
-             MotorFunction::Reverse { .. } => self.reverse(),
+             MotorFunction::Forward(_) => self.forward(),
+             MotorFunction::Reverse(_) => self.reverse(),
              MotorFunction::FreeRunningMotorStop => self.free_running_motor_stop(),
              MotorFunction::FastMotorStop => self.fast_motor_stop(),
         } 
@@ -84,24 +83,25 @@ where
         // Set duty cycle
         let throttle = match function {
             MotorFunction::Forward ( throttle ) | MotorFunction::Reverse ( throttle ) => throttle,
-            _ => Self::STOP_THROTTLE,
+            MotorFunction::FastMotorStop => u16::MAX,
+            MotorFunction::FreeRunningMotorStop => 0u16,
         };
 
         self.set_throttle(throttle);
     }
 
     pub fn get_throttle(&self) -> u16 {
-        self.throtte
+        self.throttle
     }
 
-    fn set_throttle(&mut self, throtte: u16) {
-        self.throtte = throtte;
+    fn set_throttle(&mut self, throttle: u16) {
+        self.throttle = throttle;
 
-        let duty = self.duty_from_freescale(throtte);
+        let duty = self.duty_from_fullscale(throttle);
         self.enable.set_duty_cycle(duty).ok();
     }
 
-    fn duty_from_freescale(&self, throttle: u16) -> u16 {
+    fn duty_from_fullscale(&self, throttle: u16) -> u16 {
         let max = self.enable.max_duty_cycle() as u32;
         let throttle = throttle as u32;
 
@@ -110,20 +110,20 @@ where
     
     /// Sets the L298 into forward mode
     fn forward(&mut self) {
-        self.dir1.set_high().unwrap();
-        self.dir2.set_low().unwrap();
+        self.dir1.set_high().ok();
+        self.dir2.set_low().ok();
     }
 
     /// Sets the L298 into reverse mode
     fn reverse(&mut self) {
-        self.dir1.set_low().unwrap();
-        self.dir2.set_high().unwrap();
+        self.dir1.set_low().ok();
+        self.dir2.set_high().ok();
     }
 
     /// Sets the L298 into fast motor stop mode
     fn fast_motor_stop(&mut self) {
-        self.dir1.set_high().unwrap();
-        self.dir2.set_high().unwrap();
+        self.dir1.set_high().ok();
+        self.dir2.set_high().ok();
     }
 
     /// Sets the L298 into free running motor stop mode
